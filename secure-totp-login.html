@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Secure TOTP Login</title>
+
+  <!-- otplib (for TOTP) -->
+  <script src="https://cdn.jsdelivr.net/npm/otplib-ext-totp@7.0.2/otplib-browser.min.js"></script>
+
+  <!-- QRCode.js (for generating QR code) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+    integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Roboto', sans-serif;
+    }
+    body {
+      margin: 0;
+      background: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .container {
+      width: 100%;
+      max-width: 360px;
+      padding: 40px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    h2 {
+      text-align: center;
+      color: #202124;
+      font-weight: 400;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      font-size: 16px;
+    }
+    button {
+      width: 100%;
+      background: #1a73e8;
+      color: white;
+      padding: 12px;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #1669c1;
+    }
+    #qrcode {
+      margin: 10px auto;
+      display: none;
+      text-align: center;
+    }
+    .hidden {
+      display: none;
+    }
+    .error {
+      color: red;
+      text-align: center;
+    }
+    .success {
+      color: green;
+      text-align: center;
+    }
+    #secretDisplay {
+      font-family: monospace;
+      font-size: 14px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="registerScreen">
+    <h2>Register</h2>
+    <input type="text" id="regUsername" placeholder="Choose a username" />
+    <button onclick="register()">Register</button>
+    <div id="qrcode"></div>
+    <p class="success" id="regSuccess"></p>
+    <p id="secretDisplay"></p>
+  </div>
+
+  <div class="container hidden" id="loginScreen">
+    <h2>Login</h2>
+    <input type="text" id="loginUsername" placeholder="Username" />
+    <input type="text" id="otpInput" placeholder="Enter 6-digit OTP" maxlength="6" />
+    <div class="error" id="errorMsg"></div>
+    <button onclick="login()">Login</button>
+  </div>
+
+  <div class="container hidden" id="welcomeScreen">
+    <h2>✅ Access Granted</h2>
+    <p>Welcome, <span id="welcomeUser"></span>!</p>
+  </div>
+
+  <script>
+    const registeredUsers = JSON.parse(localStorage.getItem('users') || '{}');
+
+    function register() {
+      const username = document.getElementById('regUsername').value.trim();
+      if (!username) return alert("Enter a username");
+
+      if (registeredUsers[username]) {
+        alert("User already exists. Try login.");
+        return;
+      }
+
+      const secret = otplib.authenticator.generateSecret();
+      registeredUsers[username] = secret;
+      localStorage.setItem('users', JSON.stringify(registeredUsers));
+
+      const uri = otplib.authenticator.keyuri(username, 'SecureLoginApp', secret);
+
+      // Generate QR code using qrcodejs
+      document.getElementById('qrcode').innerHTML = '';
+      new QRCode(document.getElementById('qrcode'), {
+        text: uri,
+        width: 200,
+        height: 200
+      });
+
+      document.getElementById('qrcode').style.display = 'block';
+      document.getElementById('regSuccess').innerText = "✅ Scan QR with Google Authenticator";
+      document.getElementById('secretDisplay').innerText = `Secret Key (Manual Entry): ${secret}`;
+    }
+
+    function login() {
+      const username = document.getElementById('loginUsername').value.trim();
+      const otp = document.getElementById('otpInput').value.trim();
+      const secret = registeredUsers[username];
+
+      if (!username || !otp) {
+        showError("Please fill in both fields.");
+        return;
+      }
+
+      if (!secret) {
+        showError("User not found. Please register.");
+        return;
+      }
+
+      const isValid = otplib.authenticator.check(otp, secret);
+      if (isValid) {
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('welcomeScreen').classList.remove('hidden');
+        document.getElementById('welcomeUser').textContent = username;
+      } else {
+        showError("Invalid OTP.");
+      }
+    }
+
+    function showError(msg) {
+      const error = document.getElementById('errorMsg');
+      error.textContent = msg;
+      setTimeout(() => (error.textContent = ''), 3000);
+    }
+
+    // Auto-switch to login if any user already registered
+    if (Object.keys(registeredUsers).length > 0) {
+      document.getElementById('registerScreen').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
+
